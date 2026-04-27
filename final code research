@@ -1,0 +1,596 @@
+# !pip install yfinance xgboost tensorflow scikit-learn statsmodels seaborn
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, GRU, Dense
+
+# ------------------ DATA ------------------
+data = yf.download("RELIANCE.NS", start="2019-01-01", end="2024-01-01")
+prices = data['Close'].dropna().values.reshape(-1,1)
+
+# ------------------ HELPER ------------------
+def rmse(y, pred):
+    return np.sqrt(mean_squared_error(y, pred))
+
+# ------------------ ARIMA ------------------
+arima = ARIMA(prices, order=(5,1,0)).fit()
+arima_pred = arima.predict(start=1, end=len(prices)-1)
+
+# ------------------ PREP ------------------
+scaler = MinMaxScaler()
+scaled = scaler.fit_transform(prices)
+
+window = 10
+X, y = [], []
+
+for i in range(len(scaled)-window):
+    X.append(scaled[i:i+window])
+    y.append(scaled[i+window])
+
+X, y = np.array(X), np.array(y)
+X_flat = X.reshape(X.shape[0], -1)
+
+target = prices[window:].flatten()
+
+# ------------------ LSTM ------------------
+lstm = Sequential([LSTM(50, input_shape=(window,1)), Dense(1)])
+lstm.compile(optimizer='adam', loss='mse')
+lstm.fit(X, y, epochs=5, verbose=0)
+lstm_pred = scaler.inverse_transform(lstm.predict(X)).flatten()
+
+# ------------------ GRU ------------------
+gru = Sequential([GRU(50, input_shape=(window,1)), Dense(1)])
+gru.compile(optimizer='adam', loss='mse')
+gru.fit(X, y, epochs=5, verbose=0)
+gru_pred = scaler.inverse_transform(gru.predict(X)).flatten()
+
+# ------------------ ML MODELS ------------------
+rf = RandomForestRegressor(n_estimators=50)
+rf.fit(X_flat, target)
+rf_pred = rf.predict(X_flat)
+
+svr = SVR()
+svr.fit(X_flat, target)
+svr_pred = svr.predict(X_flat)
+
+xgb = XGBRegressor(n_estimators=100)
+xgb.fit(X_flat, target)
+xgb_pred = xgb.predict(X_flat)
+
+# ------------------ ALIGN ------------------
+min_len = min(len(arima_pred), len(lstm_pred))
+y_true = target[:min_len]
+
+results = {
+    "ARIMA": arima_pred[:min_len],
+    "LSTM": lstm_pred[:min_len],
+    "GRU": gru_pred[:min_len],
+    "RandomForest": rf_pred[:min_len],
+    "SVR": svr_pred[:min_len],
+    "XGBoost": xgb_pred[:min_len]
+}
+
+# ------------------ TABLE (Predictions) ------------------
+results_df = pd.DataFrame(results)
+results_df["Actual"] = y_true
+
+print("\n📊 Sample Prediction Table:\n")
+print(results_df.head())
+
+results_df.to_csv("full_results.csv", index=False)
+
+# ------------------ ACCURACY TABLE ------------------
+accuracy = []
+
+for model, pred in results.items():
+    accuracy.append([model, rmse(y_true, pred)])
+
+accuracy_df = pd.DataFrame(accuracy, columns=["Model", "RMSE"])
+print("\n📈 Model Accuracy:\n")
+print(accuracy_df)
+
+accuracy_df.to_csv("model_accuracy.csv", index=False)
+
+# ------------------ GRAPH 1: ALL MODELS ------------------
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+for model, pred in results.items():
+    plt.plot(pred, label=model)
+
+plt.legend()
+plt.title("All Model Predictions")
+plt.grid(True)
+plt.savefig("all_models.png")
+plt.show()
+
+# ------------------ GRAPH 2: RMSE BAR ------------------
+plt.figure(figsize=(8,5))
+sns.barplot(x="Model", y="RMSE", data=accuracy_df)
+plt.title("Model RMSE Comparison")
+plt.xticks(rotation=30)
+plt.grid(True)
+plt.savefig("rmse_bar.png")
+plt.show()
+
+# ------------------ GRAPH 3: TOP MODELS ------------------
+top_models = accuracy_df.sort_values("RMSE").head(3)["Model"].values
+
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+
+for m in top_models:
+    plt.plot(results[m], label=m)
+
+plt.legend()
+plt.title("Top 3 Models Comparison")
+plt.grid(True)
+plt.savefig("top_models.png")
+plt.show()
+
+# ------------------ GRAPH 4: ERROR ------------------
+errors = {m: abs(y_true - pred) for m, pred in results.items()}
+errors_df = pd.DataFrame(errors)
+
+plt.figure(figsize=(10,6))
+errors_df.mean().plot(kind='bar')
+plt.title("Average Error Comparison")
+plt.ylabel("Error")
+plt.savefig("error.png")
+plt.show()
+# !pip install yfinance xgboost tensorflow scikit-learn statsmodels seaborn
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, GRU, Dense
+
+# ------------------ DATA ------------------
+data = yf.download("RELIANCE.NS", start="2019-01-01", end="2024-01-01")
+prices = data['Close'].dropna().values.reshape(-1,1)
+
+# ------------------ HELPER ------------------
+def rmse(y, pred):
+    return np.sqrt(mean_squared_error(y, pred))
+
+# ------------------ ARIMA ------------------
+arima = ARIMA(prices, order=(5,1,0)).fit()
+arima_pred = arima.predict(start=1, end=len(prices)-1)
+
+# ------------------ PREP ------------------
+scaler = MinMaxScaler()
+scaled = scaler.fit_transform(prices)
+
+window = 10
+X, y = [], []
+
+for i in range(len(scaled)-window):
+    X.append(scaled[i:i+window])
+    y.append(scaled[i+window])
+
+X, y = np.array(X), np.array(y)
+X_flat = X.reshape(X.shape[0], -1)
+
+target = prices[window:].flatten()
+
+# ------------------ LSTM ------------------
+lstm = Sequential([LSTM(50, input_shape=(window,1)), Dense(1)])
+lstm.compile(optimizer='adam', loss='mse')
+lstm.fit(X, y, epochs=5, verbose=0)
+lstm_pred = scaler.inverse_transform(lstm.predict(X)).flatten()
+
+# ------------------ GRU ------------------
+gru = Sequential([GRU(50, input_shape=(window,1)), Dense(1)])
+gru.compile(optimizer='adam', loss='mse')
+gru.fit(X, y, epochs=5, verbose=0)
+gru_pred = scaler.inverse_transform(gru.predict(X)).flatten()
+
+# ------------------ ML MODELS ------------------
+rf = RandomForestRegressor(n_estimators=50)
+rf.fit(X_flat, target)
+rf_pred = rf.predict(X_flat)
+
+svr = SVR()
+svr.fit(X_flat, target)
+svr_pred = svr.predict(X_flat)
+
+xgb = XGBRegressor(n_estimators=100)
+xgb.fit(X_flat, target)
+xgb_pred = xgb.predict(X_flat)
+
+# ------------------ ALIGN ------------------
+min_len = min(len(arima_pred), len(lstm_pred))
+y_true = target[:min_len]
+
+results = {
+    "ARIMA": arima_pred[:min_len],
+    "LSTM": lstm_pred[:min_len],
+    "GRU": gru_pred[:min_len],
+    "RandomForest": rf_pred[:min_len],
+    "SVR": svr_pred[:min_len],
+    "XGBoost": xgb_pred[:min_len]
+}
+
+# ------------------ TABLE (Predictions) ------------------
+results_df = pd.DataFrame(results)
+results_df["Actual"] = y_true
+
+print("\n📊 Sample Prediction Table:\n")
+print(results_df.head())
+
+results_df.to_csv("full_results.csv", index=False)
+
+# ------------------ ACCURACY TABLE ------------------
+accuracy = []
+
+for model, pred in results.items():
+    accuracy.append([model, rmse(y_true, pred)])
+
+accuracy_df = pd.DataFrame(accuracy, columns=["Model", "RMSE"])
+print("\n📈 Model Accuracy:\n")
+print(accuracy_df)
+
+accuracy_df.to_csv("model_accuracy.csv", index=False)
+
+# ------------------ GRAPH 1: ALL MODELS ------------------
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+for model, pred in results.items():
+    plt.plot(pred, label=model)
+
+plt.legend()
+plt.title("All Model Predictions")
+plt.grid(True)
+plt.savefig("all_models.png")
+plt.show()
+
+# ------------------ GRAPH 2: RMSE BAR ------------------
+plt.figure(figsize=(8,5))
+sns.barplot(x="Model", y="RMSE", data=accuracy_df)
+plt.title("Model RMSE Comparison")
+plt.xticks(rotation=30)
+plt.grid(True)
+plt.savefig("rmse_bar.png")
+plt.show()
+
+# ------------------ GRAPH 3: TOP MODELS ------------------
+top_models = accuracy_df.sort_values("RMSE").head(3)["Model"].values
+
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+
+for m in top_models:
+    plt.plot(results[m], label=m)
+
+plt.legend()
+plt.title("Top 3 Models Comparison")
+plt.grid(True)
+plt.savefig("top_models.png")
+plt.show()
+
+# ------------------ GRAPH 4: ERROR ------------------
+errors = {m: abs(y_true - pred) for m, pred in results.items()}
+errors_df = pd.DataFrame(errors)
+
+plt.figure(figsize=(10,6))
+errors_df.mean().plot(kind='bar')
+plt.title("Average Error Comparison")
+plt.ylabel("Error")
+plt.savefig("error.png")
+plt.show()
+# !pip install yfinance xgboost tensorflow scikit-learn statsmodels seaborn
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, GRU, Dense
+
+# ------------------ DATA ------------------
+data = yf.download("RELIANCE.NS", start="2019-01-01", end="2024-01-01")
+prices = data['Close'].dropna().values.reshape(-1,1)
+
+# ------------------ HELPER ------------------
+def rmse(y, pred):
+    return np.sqrt(mean_squared_error(y, pred))
+
+# ------------------ ARIMA ------------------
+arima = ARIMA(prices, order=(5,1,0)).fit()
+arima_pred = arima.predict(start=1, end=len(prices)-1)
+
+# ------------------ PREP ------------------
+scaler = MinMaxScaler()
+scaled = scaler.fit_transform(prices)
+
+window = 10
+X, y = [], []
+
+for i in range(len(scaled)-window):
+    X.append(scaled[i:i+window])
+    y.append(scaled[i+window])
+
+X, y = np.array(X), np.array(y)
+X_flat = X.reshape(X.shape[0], -1)
+
+target = prices[window:].flatten()
+
+# ------------------ LSTM ------------------
+lstm = Sequential([LSTM(50, input_shape=(window,1)), Dense(1)])
+lstm.compile(optimizer='adam', loss='mse')
+lstm.fit(X, y, epochs=5, verbose=0)
+lstm_pred = scaler.inverse_transform(lstm.predict(X)).flatten()
+
+# ------------------ GRU ------------------
+gru = Sequential([GRU(50, input_shape=(window,1)), Dense(1)])
+gru.compile(optimizer='adam', loss='mse')
+gru.fit(X, y, epochs=5, verbose=0)
+gru_pred = scaler.inverse_transform(gru.predict(X)).flatten()
+
+# ------------------ ML MODELS ------------------
+rf = RandomForestRegressor(n_estimators=50)
+rf.fit(X_flat, target)
+rf_pred = rf.predict(X_flat)
+
+svr = SVR()
+svr.fit(X_flat, target)
+svr_pred = svr.predict(X_flat)
+
+xgb = XGBRegressor(n_estimators=100)
+xgb.fit(X_flat, target)
+xgb_pred = xgb.predict(X_flat)
+
+# ------------------ ALIGN ------------------
+min_len = min(len(arima_pred), len(lstm_pred))
+y_true = target[:min_len]
+
+results = {
+    "ARIMA": arima_pred[:min_len],
+    "LSTM": lstm_pred[:min_len],
+    "GRU": gru_pred[:min_len],
+    "RandomForest": rf_pred[:min_len],
+    "SVR": svr_pred[:min_len],
+    "XGBoost": xgb_pred[:min_len]
+}
+
+# ------------------ TABLE (Predictions) ------------------
+results_df = pd.DataFrame(results)
+results_df["Actual"] = y_true
+
+print("\n📊 Sample Prediction Table:\n")
+print(results_df.head())
+
+results_df.to_csv("full_results.csv", index=False)
+
+# ------------------ ACCURACY TABLE ------------------
+accuracy = []
+
+for model, pred in results.items():
+    accuracy.append([model, rmse(y_true, pred)])
+
+accuracy_df = pd.DataFrame(accuracy, columns=["Model", "RMSE"])
+print("\n📈 Model Accuracy:\n")
+print(accuracy_df)
+
+accuracy_df.to_csv("model_accuracy.csv", index=False)
+
+# ------------------ GRAPH 1: ALL MODELS ------------------
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+for model, pred in results.items():
+    plt.plot(pred, label=model)
+
+plt.legend()
+plt.title("All Model Predictions")
+plt.grid(True)
+plt.savefig("all_models.png")
+plt.show()
+
+# ------------------ GRAPH 2: RMSE BAR ------------------
+plt.figure(figsize=(8,5))
+sns.barplot(x="Model", y="RMSE", data=accuracy_df)
+plt.title("Model RMSE Comparison")
+plt.xticks(rotation=30)
+plt.grid(True)
+plt.savefig("rmse_bar.png")
+plt.show()
+
+# ------------------ GRAPH 3: TOP MODELS ------------------
+top_models = accuracy_df.sort_values("RMSE").head(3)["Model"].values
+
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+
+for m in top_models:
+    plt.plot(results[m], label=m)
+
+plt.legend()
+plt.title("Top 3 Models Comparison")
+plt.grid(True)
+plt.savefig("top_models.png")
+plt.show()
+
+# ------------------ GRAPH 4: ERROR ------------------
+errors = {m: abs(y_true - pred) for m, pred in results.items()}
+errors_df = pd.DataFrame(errors)
+
+plt.figure(figsize=(10,6))
+errors_df.mean().plot(kind='bar')
+plt.title("Average Error Comparison")
+plt.ylabel("Error")
+plt.savefig("error.png")
+plt.show()
+# !pip install yfinance xgboost tensorflow scikit-learn statsmodels seaborn
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, GRU, Dense
+
+# ------------------ DATA ------------------
+data = yf.download("RELIANCE.NS", start="2019-01-01", end="2024-01-01")
+prices = data['Close'].dropna().values.reshape(-1,1)
+
+# ------------------ HELPER ------------------
+def rmse(y, pred):
+    return np.sqrt(mean_squared_error(y, pred))
+
+# ------------------ ARIMA ------------------
+arima = ARIMA(prices, order=(5,1,0)).fit()
+arima_pred = arima.predict(start=1, end=len(prices)-1)
+
+# ------------------ PREP ------------------
+scaler = MinMaxScaler()
+scaled = scaler.fit_transform(prices)
+
+window = 10
+X, y = [], []
+
+for i in range(len(scaled)-window):
+    X.append(scaled[i:i+window])
+    y.append(scaled[i+window])
+
+X, y = np.array(X), np.array(y)
+X_flat = X.reshape(X.shape[0], -1)
+
+target = prices[window:].flatten()
+
+# ------------------ LSTM ------------------
+lstm = Sequential([LSTM(50, input_shape=(window,1)), Dense(1)])
+lstm.compile(optimizer='adam', loss='mse')
+lstm.fit(X, y, epochs=5, verbose=0)
+lstm_pred = scaler.inverse_transform(lstm.predict(X)).flatten()
+
+# ------------------ GRU ------------------
+gru = Sequential([GRU(50, input_shape=(window,1)), Dense(1)])
+gru.compile(optimizer='adam', loss='mse')
+gru.fit(X, y, epochs=5, verbose=0)
+gru_pred = scaler.inverse_transform(gru.predict(X)).flatten()
+
+# ------------------ ML MODELS ------------------
+rf = RandomForestRegressor(n_estimators=50)
+rf.fit(X_flat, target)
+rf_pred = rf.predict(X_flat)
+
+svr = SVR()
+svr.fit(X_flat, target)
+svr_pred = svr.predict(X_flat)
+
+xgb = XGBRegressor(n_estimators=100)
+xgb.fit(X_flat, target)
+xgb_pred = xgb.predict(X_flat)
+
+# ------------------ ALIGN ------------------
+min_len = min(len(arima_pred), len(lstm_pred))
+y_true = target[:min_len]
+
+results = {
+    "ARIMA": arima_pred[:min_len],
+    "LSTM": lstm_pred[:min_len],
+    "GRU": gru_pred[:min_len],
+    "RandomForest": rf_pred[:min_len],
+    "SVR": svr_pred[:min_len],
+    "XGBoost": xgb_pred[:min_len]
+}
+
+# ------------------ TABLE (Predictions) ------------------
+results_df = pd.DataFrame(results)
+results_df["Actual"] = y_true
+
+print("\n📊 Sample Prediction Table:\n")
+print(results_df.head())
+
+results_df.to_csv("full_results.csv", index=False)
+
+# ------------------ ACCURACY TABLE ------------------
+accuracy = []
+
+for model, pred in results.items():
+    accuracy.append([model, rmse(y_true, pred)])
+
+accuracy_df = pd.DataFrame(accuracy, columns=["Model", "RMSE"])
+print("\n📈 Model Accuracy:\n")
+print(accuracy_df)
+
+accuracy_df.to_csv("model_accuracy.csv", index=False)
+
+# ------------------ GRAPH 1: ALL MODELS ------------------
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+for model, pred in results.items():
+    plt.plot(pred, label=model)
+
+plt.legend()
+plt.title("All Model Predictions")
+plt.grid(True)
+plt.savefig("all_models.png")
+plt.show()
+
+# ------------------ GRAPH 2: RMSE BAR ------------------
+plt.figure(figsize=(8,5))
+sns.barplot(x="Model", y="RMSE", data=accuracy_df)
+plt.title("Model RMSE Comparison")
+plt.xticks(rotation=30)
+plt.grid(True)
+plt.savefig("rmse_bar.png")
+plt.show()
+
+# ------------------ GRAPH 3: TOP MODELS ------------------
+top_models = accuracy_df.sort_values("RMSE").head(3)["Model"].values
+
+plt.figure(figsize=(12,6))
+plt.plot(y_true, label="Actual", linewidth=2)
+
+for m in top_models:
+    plt.plot(results[m], label=m)
+
+plt.legend()
+plt.title("Top 3 Models Comparison")
+plt.grid(True)
+plt.savefig("top_models.png")
+plt.show()
+
+# ------------------ GRAPH 4: ERROR ------------------
+errors = {m: abs(y_true - pred) for m, pred in results.items()}
+errors_df = pd.DataFrame(errors)
+
+plt.figure(figsize=(10,6))
+errors_df.mean().plot(kind='bar')
+plt.title("Average Error Comparison")
+plt.ylabel("Error")
+plt.savefig("error.png")
+plt.show()
