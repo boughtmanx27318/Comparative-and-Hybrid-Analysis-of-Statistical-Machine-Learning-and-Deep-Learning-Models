@@ -1,4 +1,11 @@
 # Comparative-and-Hybrid-Analysis-of-Statistical-Machine-Learning-and-Deep-Learning-Models
+
+Aditya Singh-2210990073
+Devashish Singh Thapa-2210990264
+Nitasha-2210991996
+
+
+
 Research-Paper
 Financial Time-Series Forecasting using ML & DL 📌 Overview This project presents a comparative analysis of statistical, machine learning, and deep learning models for stock price forecasting. It evaluates multiple models on real-world stock data and proposes a hybrid approach to improve prediction performance.
 
